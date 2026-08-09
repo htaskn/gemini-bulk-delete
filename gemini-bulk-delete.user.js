@@ -1,12 +1,15 @@
 // ==UserScript==
-// @name         Gemini Bulk Delete Chats
-// @namespace    gemini-bulk-delete-recent
-// @version      1.0
-// @description  Adds checkboxes to the Gemini sidebar "Recent" chat list, allowing you to bulk delete selected chats.
-// @author       htaskn
-// @match        https://gemini.google.com/*
-// @run-at       document-idle
-// @grant        none
+// @name               Gemini Bulk Delete Chats
+// @namespace          gemini-bulk-delete-recent
+// @version            1.1
+// @description        Adds checkboxes to the Gemini sidebar "Recent" chat list, allowing you to bulk delete selected chats.
+// @author             htaskn
+// @match              https://gemini.google.com/*
+// @run-at             document-idle
+// @grant              none
+// @license            MIT
+// @contributionURL    https://buymeacoffee.com/htaskn
+// @contributionAmount $10.00
 // ==/UserScript==
 
 (function () {
@@ -16,7 +19,6 @@
 
   const SECTION_SELECTOR = 'expandable-section[data-test-id="chats-expandable-section"]';
   const ITEM_SELECTOR = 'gem-nav-list-item';
-  const OPTIONS_BTN_SELECTOR = 'button[aria-label*="Options"], button[aria-label*="オプション"]';
   const CHECKBOX_CLASS = 'gm-bulk-del-checkbox';
   const TOOLBAR_ID = 'gm-bulk-del-toolbar';
 
@@ -36,6 +38,36 @@
     return Array.from(section.querySelectorAll(ITEM_SELECTOR)).filter((item) =>
       item.querySelector('a[href^="/app/"]')
     );
+  }
+
+  // Material icon names (data-mat-icon-name / fonticon) stay in English
+  // internally regardless of the UI language, unlike aria-label / textContent.
+  // We prefer icon-based lookups and fall back to text/position heuristics.
+  function getOptionsButton(item) {
+    const icon = item.querySelector(
+      'mat-icon[data-mat-icon-name="more_vert"], mat-icon[fonticon="more_vert"]'
+    );
+    const btnFromIcon = icon ? icon.closest('button') : null;
+    if (btnFromIcon) return btnFromIcon;
+    // Fallback: each chat item normally has exactly one <button> (the options trigger)
+    const buttons = item.querySelectorAll('button');
+    return buttons.length === 1 ? buttons[0] : null;
+  }
+
+  function findDeleteMenuItem(panel) {
+    const items = Array.from(panel.querySelectorAll('[role="menuitem"]'));
+    const byIcon = items.find((mi) =>
+      mi.querySelector('mat-icon[data-mat-icon-name="delete"], mat-icon[fonticon="delete"]')
+    );
+    if (byIcon) return byIcon;
+    // Fallback: English text match
+    return items.find((mi) => mi.textContent.trim().toLowerCase() === 'delete') || null;
+  }
+
+  function findConfirmDeleteButton(dialog) {
+    const btns = Array.from(dialog.querySelectorAll('button'));
+    if (btns.length === 2) return btns[btns.length - 1]; // Cancel, Delete convention
+    return btns.find((b) => b.textContent.trim().toLowerCase() === 'delete') || null;
   }
 
   function ensureCheckbox(item) {
@@ -142,32 +174,34 @@
     const a = section.querySelector('a[href="' + href + '"]');
     if (!a) return false;
     const item = a.closest(ITEM_SELECTOR);
-    const optBtn = item.querySelector(OPTIONS_BTN_SELECTOR);
-    if (!optBtn) return false;
+
+    const optBtn = getOptionsButton(item);
+    if (!optBtn) {
+      console.warn('[gm-bulk-del] options button not found for', href);
+      return false;
+    }
     optBtn.click();
 
     const menuItem = await waitFor(() => {
       const panel = document.querySelector('.cdk-overlay-container .mat-mdc-menu-panel');
       if (!panel) return null;
-      return (
-        Array.from(panel.querySelectorAll('[role="menuitem"]')).find(
-          (b) => b.textContent.trim() === 'Delete' || b.textContent.trim() === '削除'
-        ) || null
-      );
+      return findDeleteMenuItem(panel);
     });
-    if (!menuItem) return false;
+    if (!menuItem) {
+      console.warn('[gm-bulk-del] delete menu item not found for', href);
+      return false;
+    }
     menuItem.click();
 
     const confirmBtn = await waitFor(() => {
       const dialog = document.querySelector('.cdk-overlay-container mat-dialog-container');
       if (!dialog) return null;
-      return (
-        Array.from(dialog.querySelectorAll('button')).find(
-          (b) => b.textContent.trim() === 'Delete' || b.textContent.trim() === '削除'
-        ) || null
-      );
+      return findConfirmDeleteButton(dialog);
     });
-    if (!confirmBtn) return false;
+    if (!confirmBtn) {
+      console.warn('[gm-bulk-del] confirm delete button not found for', href);
+      return false;
+    }
     confirmBtn.click();
 
     await waitFor(() => !document.querySelector('.cdk-overlay-container mat-dialog-container'));
@@ -185,17 +219,23 @@
     const origText = btn.textContent;
 
     let done = 0;
+    let failed = 0;
     for (const href of hrefs) {
       btn.textContent = 'Deleting… (' + (done + 1) + '/' + hrefs.length + ')';
       try {
-        await deleteOneChat(href);
+        const ok = await deleteOneChat(href);
+        if (!ok) failed++;
       } catch (e) {
-        console.error('Delete failed:', href, e);
+        failed++;
+        console.error('[gm-bulk-del] Delete failed:', href, e);
       }
       done++;
       await sleep(200);
     }
     btn.textContent = origText;
+    if (failed > 0) {
+      console.warn(`[gm-bulk-del] ${failed} of ${hrefs.length} chat(s) failed to delete. See warnings above.`);
+    }
     injectCheckboxes();
   }
 
