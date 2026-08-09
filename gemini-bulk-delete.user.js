@@ -209,9 +209,9 @@
   style.textContent = `
     gem-nav-list-item.gm-has-checkbox .mdc-list-item__content { max-width: 205px !important; }
     .${CHECKBOX_CLASS} { position:absolute; top:0; right:34px; height:32px; width:18px; display:flex; align-items:center; z-index:3; cursor:pointer; }
-    .#${TOOLBAR_ID} { display:flex; flex-direction:column; align-items:stretch; gap:4px; padding:6px 10px; font-size:11px; color:#444; border-bottom:1px solid #e0e0e0; margin-bottom:4px; }
-    .#${TOOLBAR_ID} button { cursor:pointer; border:none; background:#d93025; color:#fff; border-radius:6px; font-size:12px; }
-    .#${TOOLBAR_ID} button:disabled { background:#ccc; cursor:default; }
+    #${TOOLBAR_ID} { display:flex; flex-direction:column; align-items:stretch; gap:4px; padding:6px 10px; font-size:11px; color:#444; border-bottom:1px solid #e0e0e0; margin-bottom:4px; }
+    #${TOOLBAR_ID} button { cursor:pointer; border:none; background:#d93025; color:#fff; border-radius:6px; font-size:12px; }
+    #${TOOLBAR_ID} button:disabled { background:#ccc; cursor:default; }
   `;
   document.head.appendChild(style);
 
